@@ -6,6 +6,14 @@ import requests
 import json
 from datetime import datetime
 import time
+import os
+from  datetime import datetime,timedelta
+from tqdm import tqdm
+# "productID": "FY4A-_AGRI--_N_DISK_1047E_L1-_FDI-_MULT_NOM_YYYYMMDDhhmmss_YYYYMMDDhhmmss_4000M_V0001.HDF", #fy4a
+# "productID": "FY4B-_AGRI--_N_DISK_1330E_L1-_FDI-_MULT_NOM_YYYYMMDDhhmmss_YYYYMMDDhhmmss_4000M_Vnnnn.HDF", #fy4b
+# "FY4B-_GHI---_N_REGX_1330E_L1-_FDI-_MULT_NOM_YYYYMMDDhhmmss_YYYYMMDDhhmmss_2000M_Vnnnn.HDF"
+productID="FY4B-_GHI---_N_REGX_1330E_L1-_GEO-_MULT_NOM_YYYYMMDDhhmmss_YYYYMMDDhhmmss_2000M_Vnnnn.HDF"  
+sta="fy4b"
 session=requests.session()
 with open('login.cookies', 'rb') as f:
     session.cookies.update(pickle.load(f))
@@ -22,7 +30,7 @@ def getCount(startDate,endDate,startTime="00:00:00",endTime="23:59:59"):
 
     payload = json.dumps({
     "ischecked": False,
-    "productID": "FY4A-_AGRI--_N_DISK_1047E_L1-_FDI-_MULT_NOM_YYYYMMDDhhmmss_YYYYMMDDhhmmss_4000M_V0001.HDF",
+    "productID": productID,
     "txtBeginDate": startDate,
     "txtBeginTime": startTime,
     "txtEndDate": endDate,
@@ -51,7 +59,7 @@ def getCount(startDate,endDate,startTime="00:00:00",endTime="23:59:59"):
 def getFileList(startDate,endDate,i,startTime="00:00:00",endTime="23:59:59"):
     url = "http://satellite.nsmc.org.cn/PortalSite/WebServ/DataService.asmx/GetArcDatasByProduction"
     payload = json.dumps({
-    "productID": "FY4A-_AGRI--_N_DISK_1047E_L1-_FDI-_MULT_NOM_YYYYMMDDhhmmss_YYYYMMDDhhmmss_4000M_V0001.HDF",
+    "productID":productID,
     "txtBeginDate": startDate,
     "txtBeginTime": startTime,
     "txtEndDate": endDate,
@@ -90,15 +98,15 @@ def selectFile(filename):
     payload = {
     "filename": filename,
     "ischecked": True,
-    "satellitecode": "FY4A",
+    "satellitecode": sta, #fy4a fy4b
     "datalevel": "L1"
     }
     headers = {
     'Content-Type': 'application/json',
     }
     response = session.post(url, headers=headers, data=json.dumps(payload))
+    # print(response.text)
     pass
-
 #check left #lblDayFree
 def checkLeft():
     url = "http://satellite.nsmc.org.cn/PortalSite/Data/ShoppingCart.aspx"
@@ -124,22 +132,35 @@ def submit():
     }
     response = session.post(url, headers=headers, data=payload) 
 if __name__=='__main__':
+    root="/Users/ssdk/Desktop/NAS/data/users/ssdk/fy4e"
+    file_list=os.listdir(root)
+    time_list=[datetime.strptime("".join(filename.split("_")[-4:-2])[:-2],"%Y%m%d%H")  for filename in file_list]
+    startDates=[time.strftime("%Y-%m-%d") for time in time_list]
+    endDates=[time.strftime("%Y-%m-%d") for time in time_list]
+    startTimes=[time.strftime("%H:%M:%S") for time in time_list]
+    endTimes=[(time+timedelta(minutes=59,seconds=59)).strftime("%H:%M:%S") for time in time_list]
+
     print(isLogin())
     # startDate='2023-01-13'
     # endDate='2023-01-13'
-    # count=getCount(startDate,endDate)
-    # times=(count//30)+1
-    # fileList=[]
-    # for i in range(times):
-    #     fileList+=getFileList(startDate,endDate,i,startTime="21:00:00",endTime="21:59:25")
-    
+    for i in range(len(startDates)):
+        startDate=startDates[i]
+        endDate =endDates[i]
+        startTime=startTimes[i]
+        endTime=endTimes[i]
+        count=getCount(startDate,endDate,startTime=startTime,endTime=endTime)
+        # print(count)
+        times=(count//30)+1
+        fileList=[]
+        for i in range(times):
+            fileList+=getFileList(startDate,endDate,i,startTime=startTime,endTime=endTime)
 
-    # for fileObj in fileList:
-    #     date=fileObj["DATACREATEDATE"]
-    #     date=datetime.strptime(date,"%Y/%m/%d %H:%M:%S")
-    #     if(date.minute==0):
-    #         selectFile(fileObj["ARCHIVENAME"])
-    # #可以先把submit注释掉，这样就会留在购物车，不会提交订单        
-    # submit()
-    print("Left: ",checkLeft(),"MB")
+        for fileObj in tqdm(fileList):
+            date=fileObj["DATACREATEDATE"]
+            date=datetime.strptime(date,"%Y/%m/%d %H:%M:%S")
+            # if(date.minute==0):
+            selectFile(fileObj["ARCHIVENAME"])
+        #可以先把submit注释掉，这样就会留在购物车，不会提交订单        
+    submit()
+        # print("Left: ",checkLeft(),"MB")
     pass
